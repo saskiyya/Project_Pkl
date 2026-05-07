@@ -442,108 +442,124 @@ selected = st.radio("nav", tabs, horizontal=True, label_visibility="collapsed")
 st.markdown("""<hr style="border:none; border-top:1px solid #000000; margin:0 0 20px 0;">""", unsafe_allow_html=True)
 
 #################################################### PREDICTION ###########################################################################
-
 if selected == "🔮 Prediction":
     st.markdown('<div class="section-title">🔮 Prediction</div>', unsafe_allow_html=True)
-with tab1:
-    st.markdown("""
-    Aplikasi Machine Learning regresi untuk memprediksi **Gaji Data Science (USD)** berdasarkan faktor seperti
-    **Tahun Kerja**, **Tingkat Pengalaman**, **Jenis Pekerjaan**, **Jabatan**, **Sistem Kerja**, dan **Ukuran Perusahaan**.
-    """)
+    jabatan_list = sorted(df["Jabatan"].unique().tolist())
 
-    try:
-        model = joblib.load("model_gaji.joblib")
-    except Exception as e:
-        st.error(f"Gagal memuat model: {e}")
-        st.stop()
-
-    st.subheader("📊 Input Data")
-    col1, col2, col3 = st.columns(3)
-
-    all_jabatan = sorted(df["Jabatan"].unique().tolist())
-    all_negara = sorted(df["Negara Tinggal"].unique().tolist())
-
+    col1, col2 = st.columns(2)
     with col1:
-        tahun_kerja = st.selectbox(
-            "📅 Tahun Kerja",
-            options=sorted(df["Tahun Kerja"].unique().tolist(), reverse=True)
-        )
-        tingkat_pengalaman = st.selectbox(
-            "🏅 Tingkat Pengalaman",
-            options=df["Tingkat Pengalaman"].unique().tolist()
-        )
-        jenis_pekerjaan = st.selectbox(
-            "💼 Jenis Pekerjaan",
-            options=df["Jenis Pekerjaan"].unique().tolist()
-        )
-
+        tahun = st.selectbox("Tahun Kerja", sorted(df["Tahun Kerja"].unique().tolist(), reverse=True))
     with col2:
-        jabatan = st.selectbox(
-            "🔖 Jabatan",
-            options=all_jabatan
-        )
-        sistem_kerja = st.selectbox(
-            "🏢 Sistem Kerja",
-            options=df["Sistem Kerja"].unique().tolist()
-        )
-        ukuran_perusahaan = st.selectbox(
-            "🏗️ Ukuran Perusahaan",
-            options=df["Ukuran Perusahaan"].unique().tolist()
-        )
+        jenis = st.selectbox("Jenis Pekerjaan", sorted(df["Jenis Pekerjaan"].unique().tolist()))
 
+    col3, col4 = st.columns(2)
     with col3:
-        negara_tinggal = st.selectbox(
-            "🌍 Negara Tinggal",
-            options=all_negara
-        )
-        lokasi_perusahaan = st.selectbox(
-            "📍 Lokasi Perusahaan",
-            options=sorted(df["Lokasi Perusahaan"].unique().tolist())
-        )
-        mata_uang = st.selectbox(
-            "💱 Mata Uang",
-            options=df["Mata Uang"].unique().tolist()
-        )
+        pengalaman = st.selectbox("Tingkat Pengalaman", ["Pemula", "Menengah", "Senior", "Eksekutif"])
+    with col4:
+        sistem = st.selectbox("Sistem Kerja", sorted(df["Sistem Kerja"].unique().tolist()))
+
+    col5, col6 = st.columns(2)
+    with col5:
+        ukuran = st.selectbox("Ukuran Perusahaan", ["Kecil", "Menengah", "Besar"])
+    with col6:
+        jabatan = st.selectbox("Jabatan", jabatan_list)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if st.button(" Prediksi Sekarang", use_container_width=True):
+    # ── Training model (di luar tombol supaya tidak diulang setiap render) ──
+    from sklearn.ensemble import RandomForestRegressor
 
-        data_input = {
-            "Tahun Kerja": tahun_kerja,
-            "Tingkat Pengalaman": tingkat_pengalaman,
-            "Jenis Pekerjaan": jenis_pekerjaan,
-            "Sistem Kerja": sistem_kerja,
+    df_model = df[[
+        "Tahun Kerja", "Tingkat Pengalaman", "Jenis Pekerjaan",
+        "Jabatan", "Sistem Kerja", "Ukuran Perusahaan", "Gaji (USD)"
+    ]].copy()
+
+    df_encoded = pd.get_dummies(df_model, columns=[
+        "Tingkat Pengalaman", "Jenis Pekerjaan",
+        "Jabatan", "Sistem Kerja", "Ukuran Perusahaan"
+    ])
+
+    X = df_encoded.drop("Gaji (USD)", axis=1)
+    y = df_encoded["Gaji (USD)"]
+    columns = X.columns.tolist()
+
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X, y)
+
+    if st.button("🔍 Prediksi Gaji Sekarang", use_container_width=True):
+
+        # ── Prediksi gaji untuk input user ──
+        input_dict = {
+            "Tahun Kerja": int(tahun),
+            "Tingkat Pengalaman": pengalaman,
+            "Jenis Pekerjaan": jenis,
+            "Jabatan": jabatan,
+            "Sistem Kerja": sistem,
+            "Ukuran Perusahaan": ukuran
         }
 
-        data_baru = pd.DataFrame([data_input])
+        input_df = pd.DataFrame([input_dict])
+        input_encoded = pd.get_dummies(input_df, columns=[
+            "Tingkat Pengalaman", "Jenis Pekerjaan",
+            "Jabatan", "Sistem Kerja", "Ukuran Perusahaan"
+        ])
+        input_encoded = input_encoded.reindex(columns=columns, fill_value=0)
 
-        try:
-            prediksi_raw = model.predict(data_baru)[0]
-            prediksi = max(0, prediksi_raw)
-        except Exception as ex:
-            st.warning(f"Catatan: Pastikan format input sesuai preprocessing model. Error: {ex}")
-            prediksi = 0
+        predicted = int(model.predict(input_encoded)[0])
+        kurs = 16300
+        predicted_idr = predicted * kurs
 
-        st.markdown("## 🎯 Hasil Prediksi")
+        st.balloons()
+        st.markdown(f"""
+        <div class="card">
+            <h3>Salary Prediction : 💰 ${predicted:,}</h3>
+            <p>Salary Prediction Rupiah Rp. {predicted_idr:,}</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        col_hasil, col_detail = st.columns([2, 1])
+        st.divider()
+        st.markdown("### 📊 Perbandingan Gaji per Tingkat Pengalaman")
 
-        with col_hasil:
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg,#36D1DC,#5B86E5);
-                padding:30px;
-                border-radius:15px;
-                text-align:center;
-                color:white;
-            ">
-                <h3>Estimasi Gaji</h3>
-                <h1>${prediksi:,.0f}</h1>
-                <p>Perkiraan gaji per tahun (USD)</p>
-            </div>
-            """, unsafe_allow_html=True)
+        # ── FIX: Prediksi untuk semua level pengalaman pakai model ──
+        levels = ["Pemula", "Menengah", "Senior", "Eksekutif"]
+        salaries = []
 
+        for level in levels:
+            cmp_dict = {
+                "Tahun Kerja": int(tahun),
+                "Tingkat Pengalaman": level,
+                "Jenis Pekerjaan": jenis,
+                "Jabatan": jabatan,
+                "Sistem Kerja": sistem,
+                "Ukuran Perusahaan": ukuran
+            }
+            cmp_df = pd.DataFrame([cmp_dict])
+            cmp_encoded = pd.get_dummies(cmp_df, columns=[
+                "Tingkat Pengalaman", "Jenis Pekerjaan",
+                "Jabatan", "Sistem Kerja", "Ukuran Perusahaan"
+            ])
+            cmp_encoded = cmp_encoded.reindex(columns=columns, fill_value=0)
+            salaries.append(int(model.predict(cmp_encoded)[0]))
+
+        colors = ["#A2AED8" if lvl != pengalaman else "#6D789C" for lvl in levels]
+
+        fig, ax = plt.subplots(figsize=(8, 4))
+        bars = ax.bar(levels, salaries, color=colors, edgecolor="none", width=0.5)
+        ax.set_ylabel("Gaji (USD)", fontsize=11)
+        ax.set_title(f"Estimasi Gaji per Level — {jabatan}", fontsize=12, pad=12)
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"${v:,.0f}"))
+        ax.spines[["top", "right"]].set_visible(False)
+
+        for bar, sal in zip(bars, salaries):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 1000,
+                f"${sal:,}",
+                ha="center", va="bottom", fontsize=9
+            )
+
+        fig.tight_layout()
+        st.pyplot(fig)
         st.markdown('<div class="footer">©2026 - Dibuat dengan ❤ oleh Saskia Humaira menggunakan Streamlit &amp; Scikit-Learn</div>', unsafe_allow_html=True)
 ################################################################# INFORMATION #######################################################################
 elif selected == "🏠 Information":
