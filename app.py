@@ -469,7 +469,7 @@ if selected == "🔮 Prediction":
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Training model (di luar tombol supaya tidak diulang setiap render) ──
-    from sklearn.ensemble import RandomForestRegressor
+    
 
     df_model = df[[
         "Tahun Kerja", "Tingkat Pengalaman", "Jenis Pekerjaan",
