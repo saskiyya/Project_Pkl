@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 df = pd.read_csv("dataset_gaji_data_science.csv")
 
 ######################################################### JUDUL ##################################################################
@@ -437,13 +438,16 @@ st.markdown("""<hr style="border:none; border-top:1px solid #000000; margin:0 0 
 ###################################################### NAVIGASI ######################################################################
 
 st.markdown("<br>", unsafe_allow_html=True)
-tabs = ["🔮 Prediction", "🏠 Information", "📊 Developer", "📈 Analisis Kode"]
+tabs = ["🔮 Prediction", "🏠 Information", "📊 Developer" "📈Analisis Kode"]
 selected = st.radio("nav", tabs, horizontal=True, label_visibility="collapsed")
 st.markdown("""<hr style="border:none; border-top:1px solid #000000; margin:0 0 20px 0;">""", unsafe_allow_html=True)
 
 #################################################### PREDICTION ###########################################################################
+
 if selected == "🔮 Prediction":
     st.markdown('<div class="section-title">🔮 Prediction</div>', unsafe_allow_html=True)
+
+    # Ambil nilai unik langsung dari dataset
     jabatan_list = sorted(df["Jabatan"].unique().tolist())
 
     col1, col2 = st.columns(2)
@@ -466,29 +470,41 @@ if selected == "🔮 Prediction":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Training model (di luar tombol supaya tidak diulang setiap render) ──
-    from sklearn.ensemble import RandomForestRegressor
+    from sklearn.linear_model import LinearRegression
 
+    # Ambil kolom yang sesuai dataset (nama kolom PERSIS sama dengan CSV)
     df_model = df[[
-        "Tahun Kerja", "Tingkat Pengalaman", "Jenis Pekerjaan",
-        "Jabatan", "Sistem Kerja", "Ukuran Perusahaan", "Gaji (USD)"
+        "Tahun Kerja",
+        "Tingkat Pengalaman",
+        "Jenis Pekerjaan",
+        "Jabatan",
+        "Sistem Kerja",
+        "Ukuran Perusahaan",
+        "Gaji (USD)"
     ]].copy()
 
+    # Encoding dengan get_dummies
     df_encoded = pd.get_dummies(df_model, columns=[
-        "Tingkat Pengalaman", "Jenis Pekerjaan",
-        "Jabatan", "Sistem Kerja", "Ukuran Perusahaan"
+        "Tingkat Pengalaman",
+        "Jenis Pekerjaan",
+        "Jabatan",
+        "Sistem Kerja",
+        "Ukuran Perusahaan"
     ])
 
+    # Split X dan y — target kolom adalah "Gaji (USD)"
     X = df_encoded.drop("Gaji (USD)", axis=1)
     y = df_encoded["Gaji (USD)"]
+
+    # Simpan nama kolom untuk reindex nanti
     columns = X.columns.tolist()
 
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    # Training model
+    model = LinearRegression()
     model.fit(X, y)
 
     if st.button("🔍 Prediksi Gaji Sekarang", use_container_width=True):
 
-        # ── Prediksi gaji untuk input user ──
         input_dict = {
             "Tahun Kerja": int(tahun),
             "Tingkat Pengalaman": pengalaman,
@@ -499,13 +515,21 @@ if selected == "🔮 Prediction":
         }
 
         input_df = pd.DataFrame([input_dict])
+
+        # Encoding input sama seperti df_model
         input_encoded = pd.get_dummies(input_df, columns=[
-            "Tingkat Pengalaman", "Jenis Pekerjaan",
-            "Jabatan", "Sistem Kerja", "Ukuran Perusahaan"
+            "Tingkat Pengalaman",
+            "Jenis Pekerjaan",
+            "Jabatan",
+            "Sistem Kerja",
+            "Ukuran Perusahaan"
         ])
+
+        # Reindex agar kolom input sama persis dengan training
         input_encoded = input_encoded.reindex(columns=columns, fill_value=0)
 
         predicted = int(model.predict(input_encoded)[0])
+
         kurs = 16300
         predicted_idr = predicted * kurs
 
@@ -516,55 +540,28 @@ if selected == "🔮 Prediction":
             <p>Salary Prediction Rupiah Rp. {predicted_idr:,}</p>
         </div>
         """, unsafe_allow_html=True)
-
         st.divider()
-        st.markdown("### 📊 Perbandingan Gaji per Tingkat Pengalaman")
+        st.markdown("### 📊 Perbandingan Gaji")
 
-        # ── FIX: Prediksi untuk semua level pengalaman pakai model ──
         levels = ["Pemula", "Menengah", "Senior", "Eksekutif"]
-        salaries = []
+        salaries = [
+            round(78546  * year_factor[tahun] * sistem_factor[sistem] / 100) * 100,
+            round(104525 * year_factor[tahun] * sistem_factor[sistem] / 100) * 100,
+            round(153051 * year_factor[tahun] * sistem_factor[sistem] / 100) * 100,
+            round(194930 * year_factor[tahun] * sistem_factor[sistem] / 100) * 100,
+        ]
 
-        for level in levels:
-            cmp_dict = {
-                "Tahun Kerja": int(tahun),
-                "Tingkat Pengalaman": level,
-                "Jenis Pekerjaan": jenis,
-                "Jabatan": jabatan,
-                "Sistem Kerja": sistem,
-                "Ukuran Perusahaan": ukuran
-            }
-            cmp_df = pd.DataFrame([cmp_dict])
-            cmp_encoded = pd.get_dummies(cmp_df, columns=[
-                "Tingkat Pengalaman", "Jenis Pekerjaan",
-                "Jabatan", "Sistem Kerja", "Ukuran Perusahaan"
-            ])
-            cmp_encoded = cmp_encoded.reindex(columns=columns, fill_value=0)
-            salaries.append(int(model.predict(cmp_encoded)[0]))
-
-        colors = ["#A2AED8" if lvl != pengalaman else "#6D789C" for lvl in levels]
-
-        fig, ax = plt.subplots(figsize=(8, 4))
-        bars = ax.bar(levels, salaries, color=colors, edgecolor="none", width=0.5)
-        ax.set_ylabel("Gaji (USD)", fontsize=11)
-        ax.set_title(f"Estimasi Gaji per Level — {jabatan}", fontsize=12, pad=12)
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"${v:,.0f}"))
-        ax.spines[["top", "right"]].set_visible(False)
-
-        for bar, sal in zip(bars, salaries):
-            ax.text(
-                bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 1000,
-                f"${sal:,}",
-                ha="center", va="bottom", fontsize=9
-            )
-
-        fig.tight_layout()
+        fig, ax = plt.subplots()
+        ax.bar(levels, salaries)
         st.pyplot(fig)
-        st.markdown('<div class="footer">©2026 - Dibuat dengan ❤ oleh Saskia Humaira menggunakan Streamlit &amp; Scikit-Learn</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="footer">©2026 - Dibuat dengan ❤ oleh Saskia Humaira menggunakan Streamlit &amp; Scikit-Learn</div>', unsafe_allow_html=True)
+
 ################################################################# INFORMATION #######################################################################
+
 elif selected == "🏠 Information":
     st.markdown('<div class="section-title">🏠 Information</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-sub">Eksplorasi statistik dan tren dari dataset gaji Data Science yang digunakan untuk melatih model:</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-sub">Eksplorasi stastistik dan tren dari dataset gaji Data Science yang digunakan untuk melatih model:</div>', unsafe_allow_html=True)
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Data", "3,755")
@@ -576,88 +573,24 @@ elif selected == "🏠 Information":
 
     st.markdown('<div class="section-title" style="font-size:1.2rem;">🚀 Input Prediksi</div>', unsafe_allow_html=True)
 
-    st.markdown("""
-    <style>
-    .info-card {
-        background: linear-gradient(135deg, #6D789C 0%, #A2AED8 100%);
-        border-radius: 14px;
-        padding: 18px 20px;
-        color: #ffffff;
-        font-size: 0.88rem;
-        line-height: 1.6;
-        height: 100%;
-        box-sizing: border-box;
-        border: 1px solid rgba(255,255,255,0.3);
-        box-shadow: 0 4px 12px rgba(109,120,156,0.25);
-        margin-bottom: 14px;
-    }
-    .info-card .ic-icon {
-        font-size: 1.6rem;
-        margin-bottom: 8px;
-    }
-    .info-card .ic-title {
-        font-weight: 700;
-        font-size: 0.95rem;
-        color: #ffffff;
-        margin-bottom: 6px;
-        letter-spacing: 0.3px;
-    }
-    .info-card p {
-        color: rgba(255,255,255,0.88);
-        margin: 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<div class="green-card"><b>📅 Tahun Kerja</b> Menunjukkan tahun kapan data pekerjaan atau gaji tersebut dicatat. Ini penting karena gaji bisa berubah setiap tahun mengikuti kondisi ekonomi dan tren industri</div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown('<div class="green-card"><b>🎯 Tingkat Pengalaman</b> Menggambarkan level pengalaman seseorang dalam bekerja.Contohnya seperti pemula, menengah, sampai senior.</div>', unsafe_allow_html=True)
 
-    row1 = st.columns(3)
-    with row1[0]:
-        st.markdown("""
-        <div class="info-card">
-            <div class="ic-icon">📅</div>
-            <div class="ic-title">Tahun Kerja</div>
-            <p>Menunjukkan tahun kapan data pekerjaan atau gaji dicatat. Penting karena gaji berubah setiap tahun mengikuti kondisi ekonomi dan tren industri.</p>
-        </div>""", unsafe_allow_html=True)
-    with row1[1]:
-        st.markdown("""
-        <div class="info-card">
-            <div class="ic-icon">🎯</div>
-            <div class="ic-title">Tingkat Pengalaman</div>
-            <p>Menggambarkan level pengalaman seseorang dalam bekerja. Mulai dari Pemula, Menengah, Senior, hingga Eksekutif.</p>
-        </div>""", unsafe_allow_html=True)
-    with row1[2]:
-        st.markdown("""
-        <div class="info-card">
-            <div class="ic-icon">🧾</div>
-            <div class="ic-title">Jenis Pekerjaan</div>
-            <p>Status pekerjaan yang dijalani — tetap, kontrak, freelance, atau paruh waktu. Berpengaruh pada stabilitas kerja dan sistem penggajian.</p>
-        </div>""", unsafe_allow_html=True)
-
-    row2 = st.columns(3)
-    with row2[0]:
-        st.markdown("""
-        <div class="info-card">
-            <div class="ic-icon">🏢</div>
-            <div class="ic-title">Sistem Kerja</div>
-            <p>Menjelaskan lokasi kerja karyawan — Remote, Hybrid, atau On-site. Mempengaruhi tunjangan dan kompensasi yang diterima.</p>
-        </div>""", unsafe_allow_html=True)
-    with row2[1]:
-        st.markdown("""
-        <div class="info-card">
-            <div class="ic-icon">🏭</div>
-            <div class="ic-title">Ukuran Perusahaan</div>
-            <p>Skala perusahaan tempat bekerja — Kecil, Menengah, atau Besar. Perusahaan besar umumnya menawarkan gaji lebih kompetitif.</p>
-        </div>""", unsafe_allow_html=True)
-    with row2[2]:
-        st.markdown("""
-        <div class="info-card">
-            <div class="ic-icon">👔</div>
-            <div class="ic-title">Jabatan</div>
-            <p>Posisi spesifik dalam bidang Data Science seperti Data Analyst, ML Engineer, Data Scientist, dan lainnya yang mempengaruhi rentang gaji.</p>
-        </div>""", unsafe_allow_html=True)
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown('<div class="green-card"><b>🧾 Jenis Pekerjaan</b> Menjelaskan status pekerjaan yang dijalani. Misalnya pekerjaan tetap, kontrak, freelance, atau paruh waktu. Ini berpengaruh ke stabilitas kerja dan sistem gaji</div>', unsafe_allow_html=True)
 
     st.markdown("---")
+
     st.markdown('<div class="section-title">📊 Visualisasi Dataset</div>', unsafe_allow_html=True)
-    st.image("grafik_information.png", use_container_width=True)
+
+    st.image(
+    "grafik_information.png",
+    use_container_width=True
+    )
 
     st.markdown('<div class="footer">©2026 - Dibuat dengan ❤ oleh Saskia Humaira menggunakan Streamlit &amp; Scikit-Learn</div>', unsafe_allow_html=True)
 
@@ -707,9 +640,7 @@ elif selected == "📊 Developer":
     st.markdown("")
     st.markdown('<div class="footer">©2026 - Dibuat dengan ❤ oleh Saskia Humaira menggunakan Streamlit &amp; Scikit-Learn</div>', unsafe_allow_html=True)
 
-################################################################### ANALISIS KODE ################################################################
-
-elif selected == "📈 Analisis Kode":
+    elif selected == "📈 Analisis Kode":
     st.markdown('<div class="section-title">📈 Analisis Kode</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-sub">Berikut adalah kode analisis data menggunakan Pandas beserta hasil outputnya:</div>', unsafe_allow_html=True)
 
